@@ -1,4 +1,4 @@
-package valgdirektoratet.votecounting
+package valgdirektoratet.countyoverview
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
@@ -6,15 +6,14 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 
 @SpringBootApplication
-class VotecountingApplication
+class CountyOverviewApplication
 
 fun main(args: Array<String>) {
-	runApplication<VotecountingApplication>(*args)
+    runApplication<CountyOverviewApplication>(*args)
 }
-
 
 @RestController
 class HelloController {
-        @GetMapping("/")
-        fun hello() = "Vote counting is up"
+    @GetMapping("/")
+    fun hello() = "Vote counting is up"
 }

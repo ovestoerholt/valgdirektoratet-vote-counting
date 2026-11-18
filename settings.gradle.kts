@@ -1,1 +1,2 @@
-rootProject.name = "votecounting"
+rootProject.name = "valgdirektoratet-vote-counting"
+include("fylkesoversikt")
