@@ -83,7 +83,7 @@ flowchart LR
 | Testcontainers | 2.x (settes av Spring Boot) |
 
 > **Verifisert:** All kode i tutorialen er kompilert og kjørt mot Spring Boot 4.1.2 / Kotlin 2.3.21 (17.11.2026): enhets- og integrasjonstester er grønne, og hele systemet er kjørt i Docker med idempotens, DLQ, uforanderlig revisjonslogg og persistens ved restart av RabbitMQ.
-| PostgreSQL | 17 (Docker-image `postgres:17-alpine`) |
+| PostgreSQL | 18 (Docker-image `postgres:18-alpine`) |
 | RabbitMQ | 4.x (Docker-image `rabbitmq:4-management`) |
 
 > **Merk om Spring Boot-versjon:** Hvis Initializr gir deg Spring Boot **3.x** i stedet for 4.x, er det én ting du må endre: bruk `Jackson2JsonMessageConverter` der tutorialen skriver `JacksonJsonMessageConverter` (se [Vedlegg A](#vedlegg-a--feilsøking)).
@@ -227,7 +227,7 @@ Lag `docker-compose.yml` i rotmappen:
 ```yaml
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     container_name: valg-postgres
     environment:
       POSTGRES_USER: valg
@@ -236,7 +236,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql   # Postgres 18+: IKKE /var/lib/postgresql/data
       - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U valg -d valg"]
@@ -270,7 +270,9 @@ volumes:
 **Forklaring:**
 
 - `volumes` (navngitte volumer) gjør at data overlever `docker compose down`. Bare `docker compose down -v` sletter dem.
-- `./infra/postgres/init:/docker-entrypoint-initdb.d` – alle `.sql`-filer i denne mappen kjøres av Postgres ved første oppstart.
+- `postgres-data:/var/lib/postgresql` – fra Postgres 18 lagrer imaget dataene i en versjonsspesifikk undermappe (`/var/lib/postgresql/18/docker`). Volumet monteres derfor på `/var/lib/postgresql`, ikke på `/var/lib/postgresql/data` som i eldre versjoner. Monterer du på den gamle stien, nekter containeren å starte. Fordelen er at en senere oppgradering til 19 får sin egen mappe ved siden av i samme volum.
+- `./infra/postgres/init:/docker-entrypoint-initdb.d:ro` – en *bind mount* som gjør mappen `infra/postgres/init` på maskinen din synlig inne i containeren, skrivebeskyttet (`ro`). Første gang containeren starter med et tomt datavolum, kjører Postgres alle `.sql`- og `.sh`-filer i mappen i alfabetisk rekkefølge. Senere endringer i filene kjøres ikke før volumet er slettet.
+- De navngitte volumene ligger inne i Dockers Linux-VM, ikke som vanlige mapper på Mac-en. Compose setter prosjektnavnet foran, så de heter f.eks. `<mappenavn>_postgres-data`. Se dem med `docker volume ls`.
 - `rabbitmq:4-management` inkluderer web-grensesnittet på port 15672.
 - `healthcheck` lar oss senere si «ikke start appene før databasen og RabbitMQ er klare».
 
@@ -1365,6 +1367,8 @@ Enhetstester er raske, men tester ikke at SQL, Flyway, transaksjoner og RabbitMQ
 
 Initializr har allerede generert `src/test/kotlin/no/valg/opptelling/TestcontainersConfiguration.kt` med `@ServiceConnection`-bønner for Postgres og RabbitMQ. `@ServiceConnection` gjør at Spring Boot automatisk peker datasource og RabbitMQ-tilkoblingen mot containerne. Åpne fila og se på den.
 
+> **Tips:** Initializr bruker ofte `postgres:latest` som image i denne fila. Bytt til `DockerImageName.parse("postgres:18-alpine")` så testene kjører mot samme Postgres-versjon som `docker-compose.yml`.
+
 Lag `src/test/kotlin/no/valg/opptelling/OpptellingServiceIntegrationTest.kt`:
 
 ```kotlin
@@ -2270,6 +2274,7 @@ Forslag til utvidelser, omtrent sortert fra enklest til mest krevende:
 | `Cannot construct instance of ValgresultatMelding (no Creators...)` | Jackson mangler Kotlin-modulen. Sjekk at `jackson-module-kotlin` finnes i `build.gradle.kts` (Initializr legger den til for Kotlin-prosjekter). |
 | `PRECONDITION_FAILED - inequivalent arg 'x-max-priority'` (eller `x-dead-letter-exchange`) | Køen finnes allerede i RabbitMQ med andre argumenter. Køargumenter kan ikke endres. Slett køen i grensesnittet (**Queues → køen → Delete**) og start appen på nytt. |
 | Databasene `opptelling`/`revisjon` finnes ikke | Init-skriptet kjører bare når Postgres-volumet er tomt. Kjør `docker compose down -v` og `docker compose up -d`. **Sletter all data.** |
+| `Error: in 18+, these Docker images are configured to store database data in a format which is compatible with "pg_ctlcluster"` | Volumet er montert på `/var/lib/postgresql/data`, som er stien fra Postgres 17 og eldre. Endre til `postgres-data:/var/lib/postgresql` i `docker-compose.yml`. Har volumet data fra en eldre versjon, må det enten slettes (`docker compose down -v`, **sletter all data**) eller oppgraderes med `pg_upgrade`. |
 | `Port 5432 is already allocated` | Du har en lokal Postgres kjørende. Stopp den (`brew services stop postgresql`) eller endre til `"5433:5432"` i compose og i `application.yml`. |
 | `Port 8081 already in use` | En `bootRun` kjører fortsatt, eller containeren kjører. Sjekk med `lsof -i :8081`. |
 | `Validate failed: Migrations have failed validation` | Du har endret en Flyway-migrering som allerede er kjørt. Lag en ny `V2__...`-fil i stedet, eller (kun lokalt!) slett databasen og start på nytt. |

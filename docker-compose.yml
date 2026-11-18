@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: valg-postgres
+    environment:
+      POSTGRES_USER: valg
+      POSTGRES_PASSWORD: valg
+      POSTGRES_DB: valg
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql   # Postgres 18+: IKKE /var/lib/postgresql/data
+      - ./infra/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U valg -d valg"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: valg-rabbitmq
+    hostname: rabbitmq          # RabbitMQ lagrer data under nodenavnet – hold det fast
+    environment:
+      RABBITMQ_DEFAULT_USER: valg
+      RABBITMQ_DEFAULT_PASS: valg
+    ports:
+      - "5672:5672"     # AMQP – applikasjonene
+      - "15672:15672"   # Web-grensesnitt
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+volumes:
+  postgres-data:
+  rabbitmq-data:
