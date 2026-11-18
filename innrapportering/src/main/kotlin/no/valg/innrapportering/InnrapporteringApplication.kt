@@ -1,4 +1,4 @@
-package valgdirektoratet.countyoverview
+package no.valg.innrapportering
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
@@ -6,14 +6,14 @@ import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.RestController
 
 @SpringBootApplication
-class CountyOverviewApplication
+class InnrapporteringApplication
 
 fun main(args: Array<String>) {
-    runApplication<CountyOverviewApplication>(*args)
+    runApplication<InnrapporteringApplication>(*args)
 }
 
 @RestController
-class HelloController {
+class RootController {
     @GetMapping("/")
-    fun hello() = "Vote counting is up"
+    fun root() = "Innrapportering svarer"
 }

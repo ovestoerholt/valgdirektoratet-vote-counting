@@ -1,0 +1,20 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: innrapportering
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: valg
+    password: valg
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

@@ -76,7 +76,7 @@ flowchart LR
 
 | Verktøy | Versjon |
 |---|---|
-| Java (JDK) | 21 |
+| Java (JDK) | 25 |
 | Kotlin | 2.3.x (settes av Spring Initializr) |
 | Spring Boot | 4.1.x (siste stabile fra Spring Initializr) |
 | Gradle | 9.x via wrapper fra Spring Initializr (Kotlin DSL) |
@@ -105,8 +105,8 @@ flowchart LR
 # Homebrew (hopp over om du har det)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# JDK 21 (Eclipse Temurin)
-brew install --cask temurin@21
+# JDK 25 (Eclipse Temurin)
+brew install --cask temurin@25
 
 # Docker: Docker Desktop ELLER OrbStack (velg én – hopp over om du har en av dem)
 brew install --cask docker      # Docker Desktop
@@ -129,7 +129,7 @@ Start Docker Desktop (eller OrbStack) og vent til den er klar.
 ### 1.2 Verifiser
 
 ```bash
-java -version            # skal vise 21.x
+java -version            # skal vise 25.x
 docker version           # skal vise både Client og Server
 docker compose version   # skal vise v2.x
 curl --version
@@ -139,11 +139,11 @@ jq --version
 Hvis `java -version` viser en annen versjon, sett `JAVA_HOME`:
 
 ```bash
-echo 'export JAVA_HOME=$(/usr/libexec/java_home -v 21)' >> ~/.zshrc
+echo 'export JAVA_HOME=$(/usr/libexec/java_home -v 25)' >> ~/.zshrc
 source ~/.zshrc
 ```
 
-**✅ Sjekkpunkt:** Alle kommandoene over svarer uten feil, og Java er versjon 21.
+**✅ Sjekkpunkt:** Alle kommandoene over svarer uten feil, og Java er versjon 25.
 
 ---
 
@@ -314,7 +314,7 @@ Vi bruker Initializr fra kommandolinjen, slik at resultatet blir helt reproduser
 curl -s https://start.spring.io/starter.zip \
   -d type=gradle-project-kotlin \
   -d language=kotlin \
-  -d javaVersion=21 \
+  -d javaVersion=25 \
   -d groupId=no.valg \
   -d artifactId=innrapportering \
   -d name=innrapportering \
@@ -354,7 +354,7 @@ innrapportering/
 Les gjennom `build.gradle.kts`. Viktige deler:
 
 - `kotlin("plugin.spring")` – gjør klasser med Spring-annotasjoner `open`. Kotlin-klasser er `final` som standard, men Spring må kunne lage subklasser (proxyer) av f.eks. `@Configuration`- og `@Transactional`-klasser.
-- `java { toolchain { languageVersion = JavaLanguageVersion.of(21) } }` – bygger med JDK 21.
+- `java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }` – bygger med JDK 25. Er ikke JDK 25 installert, feiler bygget.
 - `kotlin { compilerOptions { freeCompilerArgs.addAll("-Xjsr305=strict", ...) } }` – gjør at Kotlin respekterer Springs `@Nullable`-annotasjoner, slik at null-sikkerhet også gjelder Spring-API-er.
 - `jackson-module-kotlin` – lar Jackson lage Kotlin data classes fra JSON.
 
@@ -713,7 +713,7 @@ Fra rotmappen:
 curl -s https://start.spring.io/starter.zip \
   -d type=gradle-project-kotlin \
   -d language=kotlin \
-  -d javaVersion=21 \
+  -d javaVersion=25 \
   -d groupId=no.valg \
   -d artifactId=opptelling \
   -d name=opptelling \
@@ -1459,7 +1459,7 @@ Denne tjenesten viser at **flere køer kan få kopi av samme melding**, og at `*
 
 ```bash
 curl -s https://start.spring.io/starter.zip \
-  -d type=gradle-project-kotlin -d language=kotlin -d javaVersion=21 \
+  -d type=gradle-project-kotlin -d language=kotlin -d javaVersion=25 \
   -d groupId=no.valg -d artifactId=fylkesoversikt -d name=fylkesoversikt \
   -d packageName=no.valg.fylkesoversikt -d baseDir=fylkesoversikt \
   -d dependencies=web,rabbitmq,actuator \
@@ -1672,7 +1672,7 @@ Revisjonstjenesten lagrer **alt** som kommer, nøyaktig slik det kom – også d
 
 ```bash
 curl -s https://start.spring.io/starter.zip \
-  -d type=gradle-project-kotlin -d language=kotlin -d javaVersion=21 \
+  -d type=gradle-project-kotlin -d language=kotlin -d javaVersion=25 \
   -d groupId=no.valg -d artifactId=revisjon -d name=revisjon \
   -d packageName=no.valg.revisjon -d baseDir=revisjon \
   -d dependencies=web,rabbitmq,jdbc,postgresql,flyway,actuator \
@@ -2053,7 +2053,7 @@ Lag `Dockerfile` i **hver** av mappene `innrapportering/`, `opptelling/`, `fylke
 
 ```dockerfile
 # ---------- Byggesteg: kompiler med full JDK ----------
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /app
 
 # Kopier først bare byggefilene, slik at avhengigheter caches i et eget lag
@@ -2066,7 +2066,7 @@ COPY src src
 RUN ./gradlew bootJar --no-daemon -x test
 
 # ---------- Kjøresteg: bare JRE + jar ----------
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:25-jre
 WORKDIR /app
 RUN useradd --system --uid 1001 spring
 USER spring
@@ -2285,7 +2285,7 @@ Forslag til utvidelser, omtrent sortert fra enklest til mest krevende:
 | `Unknown dependency 'amqp'` fra Initializr | ID-en heter nå `rabbitmq`. Hent gjeldende ID-er med `curl -s -H 'Accept: application/vnd.initializr.v2.2+json' https://start.spring.io \| jq -r '.dependencies.values[].values[].id'`. |
 | `Return type mismatch ... (Mutable)List<X?>` | Spring 7 har JSpecify-nullability. Legg til `.filterNotNull()` (se steg 12.3). |
 | `./gradlew: Permission denied` | `chmod +x gradlew` |
-| Gradle bruker feil Java-versjon | Sjekk `java -version` og `JAVA_HOME`. I IntelliJ: **Settings → Build Tools → Gradle → Gradle JVM** = 21. |
+| Gradle bruker feil Java-versjon | Sjekk `java -version` og `JAVA_HOME`. I IntelliJ: **Settings → Build Tools → Gradle → Gradle JVM** = 25. |
 
 ---
 
