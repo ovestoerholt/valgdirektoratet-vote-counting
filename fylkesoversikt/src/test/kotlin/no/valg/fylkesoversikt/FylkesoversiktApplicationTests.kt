@@ -1,10 +1,10 @@
-package no.valg.countyoverview
+package no.valg.fylkesoversikt
 
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
 
 @SpringBootTest
-class CountyOverviewApplicationTests {
+class FylkesoversiktApplicationTests {
     @Test
     fun contextLoads() {
     }

@@ -1,12 +1,23 @@
+server:
+  port: 8083
+
 spring:
   application:
-    name: county-overview
+    name: fylkesoversikt
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: valg
+    password: valg
+    listener:
+      simple:
+        default-requeue-rejected: false
+
+fylkesoversikt:
+  fylke: vestfold   # små bokstaver, slik det står i routing key
 
 management:
   endpoints:
     web:
       exposure:
         include: health,info
-  endpoint:
-    health:
-      show-details: always

@@ -1730,9 +1730,82 @@ Start `innrapportering`, `opptelling` og `fylkesoversikt` med `./gradlew :<tjene
 3. Et stortingsvalg-resultat fra `"fylke": "Oslo"` → bare opptelling.
 4. Et resultat fra Vestfold med `"erEndelig": true` → se «📰 VARSEL» i loggen.
 
+Hver melding har sin egen `meldingId`, fordi `opptelling` ignorerer meldinger med en ID den allerede har behandlet (idempotens, steg 8):
+
 ```bash
-curl -s localhost:8083/api/fylkesoversikt | jq
+# 1. Stortingsvalg fra Vestfold → opptelling OG fylkesoversikt
+#    routing key: resultat.stortingsvalg.vestfold.sandefjord
+curl -s -X POST localhost:8081/api/resultater \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "meldingId": "test-11-1",
+    "valgType": "STORTINGSVALG",
+    "fylke": "Vestfold",
+    "kommune": "Sandefjord",
+    "krets": "Stokke",
+    "stemmerPerParti": {"AP": 1200, "H": 1100, "FRP": 800},
+    "erEndelig": false
+  }' | jq
+
+# 2. Kommunevalg fra Vestfold → bare fylkesoversikt
+#    routing key: resultat.kommunevalg.vestfold.sandefjord
+curl -s -X POST localhost:8081/api/resultater \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "meldingId": "test-11-2",
+    "valgType": "KOMMUNEVALG",
+    "fylke": "Vestfold",
+    "kommune": "Sandefjord",
+    "krets": "Andebu",
+    "stemmerPerParti": {"AP": 900, "H": 950, "SP": 400},
+    "erEndelig": false
+  }' | jq
+
+# 3. Stortingsvalg fra Oslo → bare opptelling
+#    routing key: resultat.stortingsvalg.oslo.oslo
+curl -s -X POST localhost:8081/api/resultater \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "meldingId": "test-11-3",
+    "valgType": "STORTINGSVALG",
+    "fylke": "Oslo",
+    "kommune": "Oslo",
+    "krets": "Gamle Oslo",
+    "stemmerPerParti": {"AP": 3000, "H": 2500, "SV": 1500},
+    "erEndelig": false
+  }' | jq
+
+# 4. Endelig resultat fra Vestfold → «📰 VARSEL» i loggen til fylkesoversikt
+#    (går også til opptelling, siden det er et stortingsvalg)
+curl -s -X POST localhost:8081/api/resultater \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "meldingId": "test-11-4",
+    "valgType": "STORTINGSVALG",
+    "fylke": "Vestfold",
+    "kommune": "Tønsberg",
+    "krets": "Sentrum",
+    "stemmerPerParti": {"AP": 2100, "H": 1900, "FRP": 1200},
+    "erEndelig": true
+  }' | jq
 ```
+
+Hvert kall svarer med `meldingId` og `routingKey`. Sjekk at routing key-en er den som står i kommentaren.
+
+Se hvem som mottok hva:
+
+```bash
+curl -s localhost:8083/api/fylkesoversikt | jq        # fylkesoversikt: 1, 2 og 4
+curl -s localhost:8082/api/opptelling/nasjonal | jq   # opptelling: 1, 3 og 4
+```
+
+- **`fylkesoversikt`** viser to valgtyper: `STORTINGSVALG` med stemmene fra Stokke og Tønsberg, og `KOMMUNEVALG` med stemmene fra Andebu. Oslo er ikke med.
+- **`opptelling`** har stemmene fra Stokke, Oslo og Tønsberg, men ikke kommunevalget fra Andebu.
+- **Loggen til `fylkesoversikt`** viser «📰 VARSEL TIL LOKALAVISENE» for melding 4 og «Foreløpig resultat» for melding 1 og 2.
+
+`Tønsberg` blir til `tønsberg` i routing key-en. Det går fint, fordi `fylkesoversikt` bare ser på fylke-leddet (`vestfold`).
+
+Kjører du kommandoene på nytt med de samme ID-ene, ignorerer `opptelling` dem, mens `fylkesoversikt` bare overskriver siste resultat for kretsen. Bytt `meldingId` hvis du vil se nye stemmer i `opptelling`.
 
 Stopp og start fylkesoversikt på nytt: oversikten er tom (tilstanden lå i minnet). Men meldinger som ble sendt **mens den var nede**, ligger trygt i `valg.vestfold.queue` og behandles når den starter. Prøv det!
 
