@@ -1,0 +1,32 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: opptelling
+  datasource:
+    url: jdbc:postgresql://localhost:5432/opptelling
+    username: valg
+    password: valg
+  jpa:
+    hibernate:
+      ddl-auto: validate   # Flyway eier skjemaet; Hibernate skal bare sjekke at det stemmer
+    open-in-view: false
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: valg
+    password: valg
+    listener:
+      simple:
+        default-requeue-rejected: false   # Feil → ikke tilbake i køen, men til DLQ
+        prefetch: 10
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
