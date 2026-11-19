@@ -4,7 +4,9 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 
-class UgyldigResultatException(melding: String) : RuntimeException(melding)
+class UgyldigResultatException(
+    melding: String,
+) : RuntimeException(melding)
 
 @Service
 class OpptellingService(
@@ -25,9 +27,13 @@ class OpptellingService(
         valider(melding)
 
         // 3. Foreløpig resultat skal ikke overskrive et endelig resultat
-        val eksisterende = stemmerRepo.findByValgTypeAndFylkeAndKommuneAndKrets(
-            melding.valgType, melding.fylke, melding.kommune, melding.krets,
-        )
+        val eksisterende =
+            stemmerRepo.findByValgTypeAndFylkeAndKommuneAndKrets(
+                melding.valgType,
+                melding.fylke,
+                melding.kommune,
+                melding.krets,
+            )
         if (!melding.erEndelig && eksisterende.any { it.erEndelig }) {
             log.info("Ignorerer foreløpig resultat for {} – endelig resultat finnes allerede", melding.krets)
             behandletRepo.save(BehandletMelding(melding.meldingId))
@@ -56,8 +62,11 @@ class OpptellingService(
 
         log.info(
             "Registrerte {} for {}/{} ({} partier, endelig={})",
-            melding.meldingId, melding.kommune, melding.krets,
-            melding.stemmerPerParti.size, melding.erEndelig,
+            melding.meldingId,
+            melding.kommune,
+            melding.krets,
+            melding.stemmerPerParti.size,
+            melding.erEndelig,
         )
     }
 

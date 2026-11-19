@@ -13,7 +13,6 @@ import org.springframework.context.annotation.Configuration
 
 @Configuration
 class RabbitConfig {
-
     companion object {
         const val RESULTAT_EXCHANGE = "valg.resultater.exchange"
         const val DLX = "valg.dlx"
@@ -40,14 +39,14 @@ class RabbitConfig {
     // --- Hovedkøen ---
     @Bean
     fun nasjonalQueue(): Queue =
-        QueueBuilder.durable(QUEUE)
-            .deadLetterExchange(DLX)   // x-dead-letter-exchange
-            .maxPriority(10)           // x-max-priority (brukes i steg 13)
+        QueueBuilder
+            .durable(QUEUE)
+            .deadLetterExchange(DLX) // x-dead-letter-exchange
+            .maxPriority(10) // x-max-priority (brukes i steg 13)
             .build()
 
     @Bean
-    fun nasjonalBinding(): Binding =
-        BindingBuilder.bind(nasjonalQueue()).to(resultatExchange()).with(BINDING)
+    fun nasjonalBinding(): Binding = BindingBuilder.bind(nasjonalQueue()).to(resultatExchange()).with(BINDING)
 
     @Bean
     fun messageConverter(): MessageConverter = JacksonJsonMessageConverter()
