@@ -9,17 +9,11 @@ import org.testcontainers.utility.DockerImageName
 
 @TestConfiguration(proxyBeanMethods = false)
 class TestcontainersConfiguration {
+    @Bean
+    @ServiceConnection
+    fun postgresContainer(): PostgreSQLContainer = PostgreSQLContainer(DockerImageName.parse("postgres:latest"))
 
-	@Bean
-	@ServiceConnection
-	fun postgresContainer(): PostgreSQLContainer {
-		return PostgreSQLContainer(DockerImageName.parse("postgres:latest"))
-	}
-
-	@Bean
-	@ServiceConnection
-	fun rabbitContainer(): RabbitMQContainer {
-		return RabbitMQContainer(DockerImageName.parse("rabbitmq:latest"))
-	}
-
+    @Bean
+    @ServiceConnection
+    fun rabbitContainer(): RabbitMQContainer = RabbitMQContainer(DockerImageName.parse("rabbitmq:latest"))
 }

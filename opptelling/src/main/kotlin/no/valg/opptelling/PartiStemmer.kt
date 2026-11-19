@@ -17,7 +17,6 @@ class PartiStemmer(
     val stemmer: Int,
     val erEndelig: Boolean,
     val meldingId: String,
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     val id: Long? = null,

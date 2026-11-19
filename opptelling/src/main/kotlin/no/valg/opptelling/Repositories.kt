@@ -7,7 +7,6 @@ import org.springframework.data.repository.query.Param
 interface BehandletMeldingRepository : JpaRepository<BehandletMelding, String>
 
 interface PartiStemmerRepository : JpaRepository<PartiStemmer, Long> {
-
     fun findByValgTypeAndFylkeAndKommuneAndKrets(
         valgType: String,
         fylke: String,
@@ -24,7 +23,9 @@ interface PartiStemmerRepository : JpaRepository<PartiStemmer, Long> {
         ORDER BY SUM(p.stemmer) DESC
         """,
     )
-    fun summerPerParti(@Param("valgType") valgType: String): List<PartiSum>
+    fun summerPerParti(
+        @Param("valgType") valgType: String,
+    ): List<PartiSum>
 }
 
 /** Projeksjon: Spring Data lager en implementasjon av dette grensesnittet for hver rad. */

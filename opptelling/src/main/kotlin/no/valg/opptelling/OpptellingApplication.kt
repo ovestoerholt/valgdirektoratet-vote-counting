@@ -7,5 +7,5 @@ import org.springframework.boot.runApplication
 class OpptellingApplication
 
 fun main(args: Array<String>) {
-	runApplication<OpptellingApplication>(*args)
+    runApplication<OpptellingApplication>(*args)
 }
