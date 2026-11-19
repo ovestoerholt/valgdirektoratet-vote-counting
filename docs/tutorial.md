@@ -37,7 +37,7 @@ Prosjektidéen er hentet fra [gemini-project-suggestion.md](gemini-project-sugge
 
 ### Hva vi bygger
 
-Fire Spring Boot-tjenester, hver i sin egen Gradle-prosjektmappe og sin egen Docker-container:
+Fire Spring Boot-tjenester, hver som et eget delprosjekt i ett felles Gradle-bygg og i sin egen Docker-container:
 
 | Tjeneste | Port | Rolle | Database | RabbitMQ |
 |---|---|---|---|---|
@@ -149,12 +149,17 @@ source ~/.zshrc
 
 ## Steg 2 – Repo-struktur og Git
 
-Vi lar alle tjenestene bo i ett Git-repo («monorepo»), men hver tjeneste er et **selvstendig Gradle-prosjekt** med egen `build.gradle.kts` og egen Gradle-wrapper. Det gjør at hver tjeneste kan bygges og deployes helt uavhengig av de andre – akkurat som om de lå i separate repoer.
+Vi lar alle tjenestene bo i ett Git-repo («monorepo») og ett **Gradle-multiprosjekt**. Rotmappen har én `settings.gradle.kts` som lister tjenestene, og én Gradle-wrapper som alle deler. Hver tjeneste er et *delprosjekt* med sin egen `build.gradle.kts`, sine egne avhengigheter og sin egen kjørbare jar.
+
+Du velger selv hva som bygges og kjøres ved å sette tjenestenavnet foran tasken: `./gradlew :opptelling:bootRun` starter bare `opptelling`, mens `./gradlew build` bygger alt. Tjenestene deployes fortsatt hver for seg, i hver sin container.
 
 Sluttresultatet vil se slik ut:
 
 ```
 valgdirektoratet-vote-counting/
+├── settings.gradle.kts   ← lister delprosjektene (tjenestene)
+├── gradlew, gradle/      ← Gradle-wrapper, felles for alle tjenestene
+├── Dockerfile            ← felles for alle tjenestene (steg 14)
 ├── docker-compose.yml
 ├── infra/
 │   └── postgres/init/01-databaser.sql
@@ -171,7 +176,10 @@ valgdirektoratet-vote-counting/
 cd ~/code/2026/valgdirektoratet-vote-counting
 git init
 mkdir -p infra/postgres/init
+echo 'rootProject.name = "valgdirektoratet-vote-counting"' > settings.gradle.kts
 ```
+
+`settings.gradle.kts` forteller Gradle hvilke delprosjekter bygget består av. Foreløpig er det tomt; vi legger til én `include(...)`-linje hver gang vi lager en tjeneste.
 
 Lag `.gitignore` i rotmappen:
 
@@ -179,9 +187,15 @@ Lag `.gitignore` i rotmappen:
 .DS_Store
 .idea/
 *.iml
+build/
+.gradle/
+.kotlin/
+bin/
+HELP.md
+!gradle/wrapper/gradle-wrapper.jar
 ```
 
-(Hvert Spring Boot-prosjekt får sin egen `.gitignore` fra Initializr som dekker `build/` og `.gradle/`.)
+Rotens `.gitignore` gjelder for alle undermapper, så den dekker byggemappene til alle tjenestene. `HELP.md` er en fil Initializr legger i hvert prosjekt; den trenger vi ikke.
 
 ```bash
 git add .
@@ -328,6 +342,19 @@ unzip innrapportering.zip && rm innrapportering.zip
 
 (Du kan også bruke <https://start.spring.io> i nettleseren med de samme valgene.)
 
+Initializr lager alltid et *selvstendig* prosjekt, med egen wrapper og egen `settings.gradle.kts`. Vi gjør det om til et delprosjekt. Siden dette er den første tjenesten, flytter vi wrapperen opp til rotmappen, der alle tjenestene skal dele den:
+
+```bash
+# Flytt Gradle-wrapperen til rotmappen
+mv innrapportering/gradlew innrapportering/gradlew.bat innrapportering/gradle innrapportering/.gitattributes .
+# Fjern det som gjorde innrapportering til et eget prosjekt
+rm innrapportering/settings.gradle.kts innrapportering/.gitignore innrapportering/HELP.md
+# Ta med tjenesten i bygget
+echo 'include("innrapportering")' >> settings.gradle.kts
+```
+
+For de neste tjenestene sletter vi wrapperen i stedet for å flytte den, siden rotmappen allerede har en.
+
 | Avhengighet | Hva den gir |
 |---|---|
 | `web` | Spring MVC + innebygd Tomcat for REST-API (`spring-boot-starter-webmvc`) |
@@ -337,18 +364,19 @@ unzip innrapportering.zip && rm innrapportering.zip
 
 ### 4.2 Bli kjent med det genererte prosjektet
 
-Åpne `innrapportering/` i IntelliJ (**File → Open** → velg mappen → «Trust project»). Vent til Gradle-synkroniseringen er ferdig.
+Åpne **rotmappen** `valgdirektoratet-vote-counting/` i IntelliJ (**File → Open** → velg mappen → «Trust project»). Vent til Gradle-synkroniseringen er ferdig. IntelliJ leser `settings.gradle.kts` og viser hver tjeneste som en modul; nye tjenester dukker opp når du laster Gradle-prosjektet på nytt (**Gradle-vinduet → Reload All Gradle Projects**).
 
 ```
-innrapportering/
-├── build.gradle.kts           ← byggescript (Kotlin DSL)
-├── settings.gradle.kts        ← prosjektnavn
-├── gradlew / gradlew.bat      ← Gradle-wrapper (ingen global Gradle nødvendig)
-├── gradle/wrapper/            ← hvilken Gradle-versjon wrapperen laster ned
-└── src/
-    ├── main/kotlin/no/valg/innrapportering/InnrapporteringApplication.kt
-    ├── main/resources/application.properties
-    └── test/kotlin/no/valg/innrapportering/InnrapporteringApplicationTests.kt
+valgdirektoratet-vote-counting/
+├── settings.gradle.kts            ← rootProject.name + include("innrapportering")
+├── gradlew / gradlew.bat          ← Gradle-wrapper (ingen global Gradle nødvendig)
+├── gradle/wrapper/                ← hvilken Gradle-versjon wrapperen laster ned
+└── innrapportering/
+    ├── build.gradle.kts           ← byggescript for tjenesten (Kotlin DSL)
+    └── src/
+        ├── main/kotlin/no/valg/innrapportering/InnrapporteringApplication.kt
+        ├── main/resources/application.properties
+        └── test/kotlin/no/valg/innrapportering/InnrapporteringApplicationTests.kt
 ```
 
 Les gjennom `build.gradle.kts`. Viktige deler:
@@ -398,10 +426,13 @@ YAML og `.properties` er likeverdige; YAML er lettere å lese når konfigurasjon
 
 ### 4.4 Kjør
 
+Alle Gradle-kommandoer i tutorialen kjøres fra **rotmappen**:
+
 ```bash
-cd innrapportering
-./gradlew bootRun
+./gradlew :innrapportering:bootRun
 ```
+
+`:innrapportering:bootRun` betyr «tasken `bootRun` i delprosjektet `innrapportering`». Uten prefikset (`./gradlew bootRun`) kjører Gradle `bootRun` i *alle* tjenestene.
 
 I en annen terminal:
 
@@ -411,10 +442,9 @@ curl -s localhost:8081/actuator/health | jq
 
 Du skal se `"status": "UP"` og en `rabbit`-komponent som også er `UP`. Det betyr at Spring Boot automatisk har konfigurert en tilkobling til RabbitMQ basert på `spring.rabbitmq.*`-propertiene – det er **auto-konfigurasjon** i praksis.
 
-Stopp appen med `Ctrl+C`.
+Stopp appen med `Ctrl+C`. Gradle melder da `BUILD FAILED` / «Build cancelled» – det er forventet, siden `bootRun` aldri blir ferdig av seg selv.
 
 ```bash
-cd ..
 git add .
 git commit -m "innrapportering: generert prosjekt"
 ```
@@ -503,7 +533,7 @@ class ResultatController {
 ### 5.3 Test
 
 ```bash
-cd innrapportering && ./gradlew bootRun
+./gradlew :innrapportering:bootRun
 ```
 
 I en annen terminal:
@@ -529,7 +559,7 @@ curl -i -X POST localhost:8081/api/resultater \
 ```
 
 ```bash
-cd .. && git add . && git commit -m "innrapportering: REST-endepunkt med validering"
+git add . && git commit -m "innrapportering: REST-endepunkt med validering"
 ```
 
 **✅ Sjekkpunkt:** Første kall gir `202` og logglinje i appen. Andre kall gir `400`.
@@ -723,6 +753,10 @@ curl -s https://start.spring.io/starter.zip \
   -o opptelling.zip
 
 unzip opptelling.zip && rm opptelling.zip
+
+# Gjør opptelling til et delprosjekt: rotmappen har allerede wrapper og settings
+rm -r opptelling/gradlew opptelling/gradlew.bat opptelling/gradle opptelling/settings.gradle.kts opptelling/.gitignore opptelling/.gitattributes opptelling/HELP.md
+echo 'include("opptelling")' >> settings.gradle.kts
 ```
 
 Nye avhengigheter:
@@ -734,7 +768,7 @@ Nye avhengigheter:
 | `flyway` | Versjonerte databasemigreringer |
 | `testcontainers` | Starter ekte Postgres/RabbitMQ i Docker under tester (steg 10) |
 
-Åpne `opptelling/` i IntelliJ (gjerne som eget vindu). Legg også her til nederst i `build.gradle.kts`:
+Last Gradle-prosjektet på nytt i IntelliJ, så dukker `opptelling` opp som modul. Legg også her til nederst i `opptelling/build.gradle.kts`:
 
 ```kotlin
 tasks.named<Jar>("jar") {
@@ -921,7 +955,7 @@ interface PartiSum {
 ### 7.6 Kjør og se at Flyway gjør jobben
 
 ```bash
-cd opptelling && ./gradlew bootRun
+./gradlew :opptelling:bootRun
 ```
 
 I loggen skal du se noe slikt som `Successfully applied 1 migration to schema "public", now at version v1`.
@@ -933,7 +967,7 @@ docker compose exec postgres psql -U valg -d opptelling -c '\dt'
 Du ser `behandlet_melding`, `parti_stemmer` og `flyway_schema_history`.
 
 ```bash
-cd .. && git add . && git commit -m "opptelling: prosjekt, Flyway-skjema og JPA-entiteter"
+git add . && git commit -m "opptelling: prosjekt, Flyway-skjema og JPA-entiteter"
 ```
 
 **✅ Sjekkpunkt:** Appen starter uten feil, og tabellene finnes i databasen `opptelling`.
@@ -1161,10 +1195,12 @@ Start begge tjenestene i hver sin terminal:
 
 ```bash
 # Terminal 1
-cd innrapportering && ./gradlew bootRun
+./gradlew :innrapportering:bootRun
 # Terminal 2
-cd opptelling && ./gradlew bootRun
+./gradlew :opptelling:bootRun
 ```
+
+> **Tips:** Du kan også starte alle tjenestene i én terminal med `./gradlew bootRun --parallel`. Uten `--parallel` kjører Gradle taskene etter hverandre, og siden `bootRun` aldri blir ferdig, starter bare den første. Ulempen er at loggene fra tjenestene blandes.
 
 I RabbitMQ-grensesnittet (**Queues**) ser du nå `valg.nasjonal.queue` (med `D`, `DLX` og `Pri` under *Features*) og `valg.dlq`.
 
@@ -1304,8 +1340,7 @@ class MandatfordelingTest {
 Kjør bare denne testklassen (den trenger ikke Docker):
 
 ```bash
-cd opptelling
-./gradlew test --tests 'no.valg.opptelling.MandatfordelingTest'
+./gradlew :opptelling:test --tests 'no.valg.opptelling.MandatfordelingTest'
 ```
 
 > **💡 Kotlin-hjørnet:** Funksjonsnavn i backticks kan inneholde mellomrom. Det er idiomatisk for testnavn i Kotlin. `520_000L` – understrek for lesbarhet, `L` for `Long`.
@@ -1354,7 +1389,7 @@ curl -s localhost:8082/api/opptelling/nasjonal | jq
 ```
 
 ```bash
-cd .. && git add . && git commit -m "opptelling: mandatfordeling og REST-API"
+git add . && git commit -m "opptelling: mandatfordeling og REST-API"
 ```
 
 **✅ Sjekkpunkt:** Enhetstestene er grønne, og `/api/opptelling/nasjonal` viser stemmer og mandater fra meldingene du har sendt.
@@ -1437,14 +1472,13 @@ class OpptellingServiceIntegrationTest(
 Kjør (Docker må kjøre):
 
 ```bash
-cd opptelling
-./gradlew test
+./gradlew :opptelling:test
 ```
 
-Første gang tar det litt tid fordi images lastes ned. Åpne `build/reports/tests/test/index.html` i nettleseren for en fin rapport.
+Første gang tar det litt tid fordi images lastes ned. Åpne `opptelling/build/reports/tests/test/index.html` i nettleseren for en fin rapport.
 
 ```bash
-cd .. && git add . && git commit -m "opptelling: integrasjonstester med Testcontainers"
+git add . && git commit -m "opptelling: integrasjonstester med Testcontainers"
 ```
 
 **✅ Sjekkpunkt:** Alle tester er grønne.
@@ -1465,9 +1499,13 @@ curl -s https://start.spring.io/starter.zip \
   -d dependencies=web,rabbitmq,actuator \
   -o fylkesoversikt.zip
 unzip fylkesoversikt.zip && rm fylkesoversikt.zip
+
+# Gjør fylkesoversikt til et delprosjekt: rotmappen har allerede wrapper og settings
+rm -r fylkesoversikt/gradlew fylkesoversikt/gradlew.bat fylkesoversikt/gradle fylkesoversikt/settings.gradle.kts fylkesoversikt/.gitignore fylkesoversikt/.gitattributes fylkesoversikt/HELP.md
+echo 'include("fylkesoversikt")' >> settings.gradle.kts
 ```
 
-Legg til `tasks.named<Jar>("jar") { enabled = false }` nederst i `build.gradle.kts`, og bytt `application.properties` med `application.yml`:
+Legg til `tasks.named<Jar>("jar") { enabled = false }` nederst i `fylkesoversikt/build.gradle.kts`, og bytt `application.properties` med `application.yml`:
 
 ```yaml
 server:
@@ -1643,7 +1681,7 @@ class FylkesoversiktController(private val fylkesoversikt: Fylkesoversikt) {
 
 ### 11.3 Test
 
-Start `innrapportering`, `opptelling` og `fylkesoversikt` (tre terminaler). Send:
+Start `innrapportering`, `opptelling` og `fylkesoversikt` med `./gradlew :<tjeneste>:bootRun` i tre terminaler. Send:
 
 1. Et stortingsvalg-resultat fra Vestfold → både opptelling **og** fylkesoversikt mottar det.
 2. Et kommunevalg-resultat fra Vestfold → bare fylkesoversikt.
@@ -1678,9 +1716,13 @@ curl -s https://start.spring.io/starter.zip \
   -d dependencies=web,rabbitmq,jdbc,postgresql,flyway,actuator \
   -o revisjon.zip
 unzip revisjon.zip && rm revisjon.zip
+
+# Gjør revisjon til et delprosjekt: rotmappen har allerede wrapper og settings
+rm -r revisjon/gradlew revisjon/gradlew.bat revisjon/gradle revisjon/settings.gradle.kts revisjon/.gitignore revisjon/.gitattributes revisjon/HELP.md
+echo 'include("revisjon")' >> settings.gradle.kts
 ```
 
-Legg til `tasks.named<Jar>("jar") { enabled = false }` i `build.gradle.kts`. `application.yml`:
+Legg til `tasks.named<Jar>("jar") { enabled = false }` i `revisjon/build.gradle.kts`. `application.yml`:
 
 ```yaml
 server:
@@ -2008,8 +2050,7 @@ simulator:
 ### 13.2 Kjør simulatoren
 
 ```bash
-cd innrapportering
-SIMULATOR_ENABLED=true ./gradlew bootRun
+SIMULATOR_ENABLED=true ./gradlew :innrapportering:bootRun
 ```
 
 (Spring Boot oversetter miljøvariabelen `SIMULATOR_ENABLED` til propertyen `simulator.enabled` – *relaxed binding*.)
@@ -2036,7 +2077,7 @@ Sett `prefetch` tilbake til `10` etterpå.
 Legg også merke til hvorfor regelen «foreløpig overskriver ikke endelig» fra steg 8 er viktig: med prioritet kommer et endelig resultat ofte *før* et eldre foreløpig resultat fra samme krets.
 
 ```bash
-cd .. && git add . && git commit -m "innrapportering: valgnatt-simulator og prioritet"
+git add . && git commit -m "innrapportering: valgnatt-simulator og prioritet"
 ```
 
 **✅ Sjekkpunkt:** Simulatoren genererer trafikk, alle konsumenter jobber, DLQ samler korrupte meldinger, og du har sett prioritering i praksis.
@@ -2047,47 +2088,62 @@ cd .. && git add . && git commit -m "innrapportering: valgnatt-simulator og prio
 
 Nå pakker vi hver tjeneste i et Docker-image og kjører hele systemet med én kommando.
 
-### 14.1 Dockerfile (lik for alle fire tjenester)
+### 14.1 Dockerfile (felles for alle fire tjenester)
 
-Lag `Dockerfile` i **hver** av mappene `innrapportering/`, `opptelling/`, `fylkesoversikt/` og `revisjon/`:
+Fordi tjenestene deler Gradle-wrapper og `settings.gradle.kts` i rotmappen, må Docker-bygget ha rotmappen som *build context*. Vi lager derfor **én** `Dockerfile` i rotmappen, og velger tjeneste med byggeargumentet `TJENESTE`:
 
 ```dockerfile
 # ---------- Byggesteg: kompiler med full JDK ----------
 FROM eclipse-temurin:25-jdk AS build
+# Hvilken tjeneste som bygges, f.eks. innrapportering (settes i docker-compose.yml)
+ARG TJENESTE
 WORKDIR /app
 
-# Kopier først bare byggefilene, slik at avhengigheter caches i et eget lag
-COPY gradlew settings.gradle.kts build.gradle.kts ./
+# Kopier først bare byggefilene, slik at avhengigheter caches i et eget lag.
+# Gradle krever at alle delprosjektene i settings.gradle.kts finnes,
+# derfor kopieres byggescriptene til alle fire tjenestene.
+COPY gradlew *.gradle.kts ./
 COPY gradle gradle
-RUN chmod +x gradlew && ./gradlew dependencies --no-daemon > /dev/null
+COPY innrapportering/build.gradle.kts innrapportering/
+COPY opptelling/build.gradle.kts opptelling/
+COPY fylkesoversikt/build.gradle.kts fylkesoversikt/
+COPY revisjon/build.gradle.kts revisjon/
+RUN chmod +x gradlew && ./gradlew :${TJENESTE}:dependencies --no-daemon > /dev/null
 
-# Kopier kildekoden og bygg (testene kjøres lokalt, ikke i Docker-bygget)
-COPY src src
-RUN ./gradlew bootJar --no-daemon -x test
+# Kopier kildekoden til denne tjenesten og bygg (testene kjøres lokalt, ikke i Docker-bygget)
+COPY ${TJENESTE}/src ${TJENESTE}/src
+RUN ./gradlew :${TJENESTE}:bootJar --no-daemon -x test
 
 # ---------- Kjøresteg: bare JRE + jar ----------
 FROM eclipse-temurin:25-jre
+ARG TJENESTE
 WORKDIR /app
 RUN useradd --system --uid 1001 spring
 USER spring
-COPY --from=build /app/build/libs/*.jar app.jar
+COPY --from=build /app/${TJENESTE}/build/libs/*.jar app.jar
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
 ```
 
 **Forklaring:**
 
 - **Multi-stage build:** Byggesteget har JDK og Gradle-cache (stort). Det ferdige imaget har bare JRE og én jar (mye mindre, og færre angrepsflater).
-- **Lag-caching:** Docker cacher hvert steg. Fordi byggefilene kopieres før `src`, lastes avhengigheter bare ned på nytt når `build.gradle.kts` endres.
+- **Lag-caching:** Docker cacher hvert steg. Fordi byggefilene kopieres før `src`, lastes avhengigheter bare ned på nytt når en `build.gradle.kts` endres.
+- **`ARG TJENESTE`:** Byggeargumentet gjelder bare i steget der det er deklarert, derfor står det i begge stegene. `:${TJENESTE}:bootJar` bygger bare den valgte tjenesten.
 - **`USER spring`:** Kjør aldri som root i containeren hvis du kan unngå det.
 - Det er derfor vi slo av `-plain.jar` i `build.gradle.kts` – ellers matcher `*.jar` to filer.
 
-Lag også `.dockerignore` i hver av de fire mappene:
+Lag også `.dockerignore` i rotmappen. Den holder byggemapper og annet unødvendig utenfor build context, så Docker ikke må sende dem med hver gang:
 
 ```
-build/
-.gradle/
+**/build/
+**/.gradle/
+**/.kotlin/
+**/bin/
+.git/
 .idea/
 *.iml
+docs/
+infra/
 ```
 
 ### 14.2 Utvid docker-compose.yml
@@ -2096,7 +2152,10 @@ Legg til følgende under `services:` i `docker-compose.yml` (etter `rabbitmq`, o
 
 ```yaml
   innrapportering:
-    build: ./innrapportering
+    build:
+      context: .
+      args:
+        TJENESTE: innrapportering
     container_name: valg-innrapportering
     profiles: ["apps"]
     ports:
@@ -2110,7 +2169,10 @@ Legg til følgende under `services:` i `docker-compose.yml` (etter `rabbitmq`, o
         condition: service_healthy
 
   opptelling:
-    build: ./opptelling
+    build:
+      context: .
+      args:
+        TJENESTE: opptelling
     container_name: valg-opptelling
     profiles: ["apps"]
     ports:
@@ -2125,7 +2187,10 @@ Legg til følgende under `services:` i `docker-compose.yml` (etter `rabbitmq`, o
         condition: service_healthy
 
   fylkesoversikt:
-    build: ./fylkesoversikt
+    build:
+      context: .
+      args:
+        TJENESTE: fylkesoversikt
     container_name: valg-fylkesoversikt
     profiles: ["apps"]
     ports:
@@ -2138,7 +2203,10 @@ Legg til følgende under `services:` i `docker-compose.yml` (etter `rabbitmq`, o
         condition: service_healthy
 
   revisjon:
-    build: ./revisjon
+    build:
+      context: .
+      args:
+        TJENESTE: revisjon
     container_name: valg-revisjon
     profiles: ["apps"]
     ports:
@@ -2155,6 +2223,7 @@ Legg til følgende under `services:` i `docker-compose.yml` (etter `rabbitmq`, o
 
 **Forklaring:**
 
+- **`build`:** `context: .` sender rotmappen til Docker, og `TJENESTE` velger hvilken tjeneste den felles `Dockerfile`-en bygger.
 - **Nettverk:** Compose lager et felles nettverk der containere finner hverandre på tjenestenavnet. Inne i Docker heter RabbitMQ `rabbitmq` og Postgres `postgres` – ikke `localhost`.
 - **Miljøvariabler overstyrer `application.yml`:** `SPRING_DATASOURCE_URL` → `spring.datasource.url`. Samme image kan dermed kjøre lokalt, i test og i produksjon med ulik konfigurasjon (jf. *12-factor app*).
 - **`profiles: ["apps"]`:** `docker compose up -d` starter fortsatt bare infrastrukturen (praktisk når du utvikler i IntelliJ). Med `--profile apps` startes alt.
@@ -2285,6 +2354,9 @@ Forslag til utvidelser, omtrent sortert fra enklest til mest krevende:
 | `Unknown dependency 'amqp'` fra Initializr | ID-en heter nå `rabbitmq`. Hent gjeldende ID-er med `curl -s -H 'Accept: application/vnd.initializr.v2.2+json' https://start.spring.io \| jq -r '.dependencies.values[].values[].id'`. |
 | `Return type mismatch ... (Mutable)List<X?>` | Spring 7 har JSpecify-nullability. Legg til `.filterNotNull()` (se steg 12.3). |
 | `./gradlew: Permission denied` | `chmod +x gradlew` |
+| `Cannot locate tasks that match ':x:bootRun' as project 'x' not found` | Tjenesten mangler i `settings.gradle.kts`. Legg til `include("x")` i rotmappens `settings.gradle.kts`. |
+| `Configuring project ':x' without an existing directory is not allowed` | `settings.gradle.kts` inkluderer en tjeneste som ikke finnes (ennå). Fjern `include`-linjen, eller lag tjenesten. I Docker: sjekk at `Dockerfile` kopierer `build.gradle.kts` for alle tjenestene. |
+| Bare én tjeneste starter med `./gradlew bootRun` | Taskene kjøres etter hverandre, og `bootRun` blir aldri ferdig. Bruk `--parallel`, eller start hver tjeneste i egen terminal med `./gradlew :<tjeneste>:bootRun`. |
 | Gradle bruker feil Java-versjon | Sjekk `java -version` og `JAVA_HOME`. I IntelliJ: **Settings → Build Tools → Gradle → Gradle JVM** = 25. |
 
 ---
@@ -2328,12 +2400,15 @@ docker compose --profile apps restart opptelling      # restart én tjeneste
 docker compose --profile apps down                    # stopp alt (behold data)
 docker compose --profile apps down -v                 # stopp alt og slett data
 
-# Lokalt med Gradle (fra tjenestemappen)
-./gradlew bootRun                                     # kjør
-SIMULATOR_ENABLED=true ./gradlew bootRun              # kjør innrapportering med simulator
-./gradlew test                                        # alle tester
-./gradlew test --tests '*MandatfordelingTest'         # én testklasse
-./gradlew bootJar                                     # bygg kjørbar jar
+# Lokalt med Gradle (fra rotmappen)
+./gradlew :opptelling:bootRun                         # kjør én tjeneste
+./gradlew bootRun --parallel                          # kjør alle tjenestene samtidig
+SIMULATOR_ENABLED=true ./gradlew :innrapportering:bootRun   # kjør innrapportering med simulator
+./gradlew build                                       # bygg og test alle tjenestene
+./gradlew :opptelling:test                            # tester for én tjeneste
+./gradlew :opptelling:test --tests '*MandatfordelingTest'   # én testklasse
+./gradlew :opptelling:bootJar                         # bygg kjørbar jar
+./gradlew projects                                    # list delprosjektene
 
 # Database
 docker compose exec postgres psql -U valg -d opptelling
