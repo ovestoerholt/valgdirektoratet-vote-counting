@@ -158,6 +158,7 @@ Sluttresultatet vil se slik ut:
 ```
 valgdirektoratet-vote-counting/
 ├── settings.gradle.kts   ← lister delprosjektene (tjenestene)
+├── build.gradle.kts      ← felles plugin-versjoner (steg 4)
 ├── gradlew, gradle/      ← Gradle-wrapper, felles for alle tjenestene
 ├── Dockerfile            ← felles for alle tjenestene (steg 14)
 ├── docker-compose.yml
@@ -355,6 +356,41 @@ echo 'include("innrapportering")' >> settings.gradle.kts
 
 For de neste tjenestene sletter vi wrapperen i stedet for å flytte den, siden rotmappen allerede har en.
 
+**Felles plugin-versjoner.** Initializr skriver versjonen på hver plugin i `plugins { ... }`, for eksempel `kotlin("jvm") version "2.3.21"`. Hvis flere delprosjekter gjør det, laster Gradle Kotlin-pluginen én gang per tjeneste, og fra tredje tjeneste advarer Kotlin om at *«The Kotlin Gradle plugin was loaded multiple times in different subprojects»*. Løsningen er å sette versjonene ett sted, i en `build.gradle.kts` i rotmappen:
+
+```kotlin
+plugins {
+    // Versjonene for tjenestenes plugins settes her, én gang for alle.
+    // `apply false` betyr at roten selv ikke bruker dem; tjenestene tar dem i bruk uten versjon.
+    kotlin("jvm") version "2.3.21" apply false
+    kotlin("plugin.spring") version "2.3.21" apply false
+    kotlin("plugin.jpa") version "2.3.21" apply false
+    id("org.springframework.boot") version "4.1.2" apply false
+    id("io.spring.dependency-management") version "1.1.7" apply false
+}
+```
+
+Bruk versjonene fra `innrapportering/build.gradle.kts` hvis Initializr ga deg nyere. `plugin.jpa` trenger vi først i steg 7, men den skal ha samme versjon som de andre Kotlin-pluginene.
+
+Fjern så versjonene fra tjenestens `plugins`-blokk:
+
+```bash
+sed -i '' -E 's/\) version "[^"]+"/)/' innrapportering/build.gradle.kts
+```
+
+`plugins`-blokken i `innrapportering/build.gradle.kts` skal nå se slik ut:
+
+```kotlin
+plugins {
+    kotlin("jvm")
+    kotlin("plugin.spring")
+    id("org.springframework.boot")
+    id("io.spring.dependency-management")
+}
+```
+
+En fordel er at du oppgraderer Kotlin eller Spring Boot for alle tjenestene ved å endre én linje i rotens `build.gradle.kts`.
+
 | Avhengighet | Hva den gir |
 |---|---|
 | `web` | Spring MVC + innebygd Tomcat for REST-API (`spring-boot-starter-webmvc`) |
@@ -369,6 +405,7 @@ For de neste tjenestene sletter vi wrapperen i stedet for å flytte den, siden r
 ```
 valgdirektoratet-vote-counting/
 ├── settings.gradle.kts            ← rootProject.name + include("innrapportering")
+├── build.gradle.kts               ← plugin-versjoner for alle tjenestene
 ├── gradlew / gradlew.bat          ← Gradle-wrapper (ingen global Gradle nødvendig)
 ├── gradle/wrapper/                ← hvilken Gradle-versjon wrapperen laster ned
 └── innrapportering/
@@ -381,6 +418,7 @@ valgdirektoratet-vote-counting/
 
 Les gjennom `build.gradle.kts`. Viktige deler:
 
+- `plugins { ... }` – hvilke Gradle-plugins tjenesten bruker. Versjonene står i rotens `build.gradle.kts`.
 - `kotlin("plugin.spring")` – gjør klasser med Spring-annotasjoner `open`. Kotlin-klasser er `final` som standard, men Spring må kunne lage subklasser (proxyer) av f.eks. `@Configuration`- og `@Transactional`-klasser.
 - `java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }` – bygger med JDK 25. Er ikke JDK 25 installert, feiler bygget.
 - `kotlin { compilerOptions { freeCompilerArgs.addAll("-Xjsr305=strict", ...) } }` – gjør at Kotlin respekterer Springs `@Nullable`-annotasjoner, slik at null-sikkerhet også gjelder Spring-API-er.
@@ -757,6 +795,8 @@ unzip opptelling.zip && rm opptelling.zip
 # Gjør opptelling til et delprosjekt: rotmappen har allerede wrapper og settings
 rm -r opptelling/gradlew opptelling/gradlew.bat opptelling/gradle opptelling/settings.gradle.kts opptelling/.gitignore opptelling/.gitattributes opptelling/HELP.md
 echo 'include("opptelling")' >> settings.gradle.kts
+# Plugin-versjonene står i rotens build.gradle.kts
+sed -i '' -E 's/\) version "[^"]+"/)/' opptelling/build.gradle.kts
 ```
 
 Nye avhengigheter:
@@ -1503,6 +1543,8 @@ unzip fylkesoversikt.zip && rm fylkesoversikt.zip
 # Gjør fylkesoversikt til et delprosjekt: rotmappen har allerede wrapper og settings
 rm -r fylkesoversikt/gradlew fylkesoversikt/gradlew.bat fylkesoversikt/gradle fylkesoversikt/settings.gradle.kts fylkesoversikt/.gitignore fylkesoversikt/.gitattributes fylkesoversikt/HELP.md
 echo 'include("fylkesoversikt")' >> settings.gradle.kts
+# Plugin-versjonene står i rotens build.gradle.kts
+sed -i '' -E 's/\) version "[^"]+"/)/' fylkesoversikt/build.gradle.kts
 ```
 
 Legg til `tasks.named<Jar>("jar") { enabled = false }` nederst i `fylkesoversikt/build.gradle.kts`, og bytt `application.properties` med `application.yml`:
@@ -1720,6 +1762,8 @@ unzip revisjon.zip && rm revisjon.zip
 # Gjør revisjon til et delprosjekt: rotmappen har allerede wrapper og settings
 rm -r revisjon/gradlew revisjon/gradlew.bat revisjon/gradle revisjon/settings.gradle.kts revisjon/.gitignore revisjon/.gitattributes revisjon/HELP.md
 echo 'include("revisjon")' >> settings.gradle.kts
+# Plugin-versjonene står i rotens build.gradle.kts
+sed -i '' -E 's/\) version "[^"]+"/)/' revisjon/build.gradle.kts
 ```
 
 Legg til `tasks.named<Jar>("jar") { enabled = false }` i `revisjon/build.gradle.kts`. `application.yml`:
@@ -2354,6 +2398,7 @@ Forslag til utvidelser, omtrent sortert fra enklest til mest krevende:
 | `Unknown dependency 'amqp'` fra Initializr | ID-en heter nå `rabbitmq`. Hent gjeldende ID-er med `curl -s -H 'Accept: application/vnd.initializr.v2.2+json' https://start.spring.io \| jq -r '.dependencies.values[].values[].id'`. |
 | `Return type mismatch ... (Mutable)List<X?>` | Spring 7 har JSpecify-nullability. Legg til `.filterNotNull()` (se steg 12.3). |
 | `./gradlew: Permission denied` | `chmod +x gradlew` |
+| `The Kotlin Gradle plugin was loaded multiple times in different subprojects` | En tjeneste har fortsatt versjoner i `plugins`-blokken. Fjern dem (se steg 4.1), slik at versjonene bare står i rotens `build.gradle.kts`. |
 | `Cannot locate tasks that match ':x:bootRun' as project 'x' not found` | Tjenesten mangler i `settings.gradle.kts`. Legg til `include("x")` i rotmappens `settings.gradle.kts`. |
 | `Configuring project ':x' without an existing directory is not allowed` | `settings.gradle.kts` inkluderer en tjeneste som ikke finnes (ennå). Fjern `include`-linjen, eller lag tjenesten. I Docker: sjekk at `Dockerfile` kopierer `build.gradle.kts` for alle tjenestene. |
 | Bare én tjeneste starter med `./gradlew bootRun` | Taskene kjøres etter hverandre, og `bootRun` blir aldri ferdig. Bruk `--parallel`, eller start hver tjeneste i egen terminal med `./gradlew :<tjeneste>:bootRun`. |
