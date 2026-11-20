@@ -1,0 +1,24 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: revisjon
+  datasource:
+    url: jdbc:postgresql://localhost:5432/revisjon
+    username: valg
+    password: valg
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: valg
+    password: valg
+    listener:
+      simple:
+        default-requeue-rejected: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

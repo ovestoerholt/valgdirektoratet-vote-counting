@@ -2030,7 +2030,43 @@ class RevisjonController(private val jdbcClient: JdbcClient) {
 
 ### 12.4 Test
 
-Start alle fire tjenestene og send noen meldinger, inkludert et duplikat og en korrupt melding.
+Start alle fire tjenestene fra roten:
+
+```bash
+./gradlew bootRun
+```
+
+Send så tre meldinger: en normal melding, et duplikat av den og en korrupt melding.
+
+```bash
+# 1. Normal melding
+curl -s -X POST localhost:8081/api/resultater -H 'Content-Type: application/json' -d '{
+  "meldingId": "test-12-1", "valgType": "STORTINGSVALG",
+  "fylke": "Vestfold", "kommune": "Larvik", "krets": "Stavern",
+  "stemmerPerParti": {"AP": 700, "H": 650, "FRP": 300}, "erEndelig": false
+}' | jq
+
+# 2. Duplikat: nøyaktig samme melding én gang til
+curl -s -X POST localhost:8081/api/resultater -H 'Content-Type: application/json' -d '{
+  "meldingId": "test-12-1", "valgType": "STORTINGSVALG",
+  "fylke": "Vestfold", "kommune": "Larvik", "krets": "Stavern",
+  "stemmerPerParti": {"AP": 700, "H": 650, "FRP": 300}, "erEndelig": false
+}' | jq
+
+# 3. Korrupt melding (negative stemmer)
+curl -s -X POST localhost:8081/api/resultater -H 'Content-Type: application/json' -d '{
+  "meldingId": "test-12-korrupt", "valgType": "STORTINGSVALG",
+  "fylke": "Vestfold", "kommune": "Larvik", "krets": "Brunlanes",
+  "stemmerPerParti": {"AP": -50, "H": 300}, "erEndelig": false
+}' | jq
+```
+
+I loggene ser du at:
+
+- **`opptelling`** logger `Duplikat ignorert: test-12-1` for melding 2. Melding 3 gir `UgyldigResultatException` og havner i `valg.dlq`.
+- **`revisjon`** logger alle tre meldingene, også den korrupte. Revisjon gjør ingen JSON-konvertering og lagrer bare de rå bytene, så den har ingenting å feile på.
+
+Se de siste postene i revisjonsloggen:
 
 ```bash
 curl -s 'localhost:8084/api/revisjon?antall=5' | jq
@@ -2041,7 +2077,12 @@ Se at duplikatet ligger i revisjonsloggen to ganger (mens opptelling bare talte 
 ```bash
 docker compose exec postgres psql -U valg -d revisjon -c \
   "SELECT melding_id, count(*) FROM revisjonslogg GROUP BY melding_id HAVING count(*) > 1;"
+#  melding_id | count
+# ------------+-------
+#  test-12-1  |     2
 ```
+
+Har du kjørt kommandoene fra tidligere steg flere ganger, kan det også dukke opp andre ID-er her.
 
 Prøv å jukse med loggen:
 
