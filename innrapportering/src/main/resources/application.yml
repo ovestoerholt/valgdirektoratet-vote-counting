@@ -18,3 +18,9 @@ management:
   endpoint:
     health:
       show-details: always
+
+
+# Ny blokk: valgnatt-simulatoren (steg 13)
+simulator:
+  enabled: false       # → simulator.enabled, leses av @ConditionalOnProperty
+  intervall-ms: 1000   # → simulator.intervall-ms, leses av @Scheduled

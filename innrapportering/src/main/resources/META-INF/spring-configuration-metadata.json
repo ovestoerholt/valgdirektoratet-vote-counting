@@ -1,0 +1,16 @@
+{
+  "properties": [
+    {
+      "name": "simulator.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Slår valgnatt-simulatoren på eller av.",
+      "defaultValue": false
+    },
+    {
+      "name": "simulator.intervall-ms",
+      "type": "java.lang.Long",
+      "description": "Millisekunder mellom hver simulerte melding.",
+      "defaultValue": 1000
+    }
+  ]
+}

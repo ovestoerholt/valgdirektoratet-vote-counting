@@ -2189,13 +2189,39 @@ fun main(args: Array<String>) {
 }
 ```
 
-Legg til i `innrapportering/src/main/resources/application.yml`:
+Legg til en ny `simulator`-blokk **nederst** i `innrapportering/src/main/resources/application.yml`. `simulator:` er en egen toppnøkkel. Den skal stå helt til venstre (uten innrykk), på samme nivå som `server:`, `spring:` og `management:`, og **ikke** inne i `spring:`. Hele fila ser da slik ut:
 
 ```yaml
+server:
+  port: 8081
+
+spring:
+  application:
+    name: innrapportering
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: valg
+    password: valg
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# Ny blokk: valgnatt-simulatoren (steg 13)
 simulator:
-  enabled: false
-  intervall-ms: 1000
+  enabled: false       # → simulator.enabled, leses av @ConditionalOnProperty
+  intervall-ms: 1000   # → simulator.intervall-ms, leses av @Scheduled
 ```
+
+Innrykket i YAML bestemmer hvilken property det blir. `enabled` står to mellomrom inn under `simulator:`, og blir derfor `simulator.enabled`, det `@ConditionalOnProperty(prefix = "simulator", name = ["enabled"])` ser etter. Havner blokken inne i `spring:`, blir propertyen `spring.simulator.enabled`, og simulatoren starter aldri.
+
+`simulator` er ikke en Spring-property, så VS Code kan vise advarselen `Unknown property 'simulator'`. Den er ufarlig og kan ignoreres.
 
 > **💡 Kotlin-hjørnet**
 >

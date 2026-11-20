@@ -9,24 +9,30 @@ import kotlin.random.Random
 
 @Component
 @ConditionalOnProperty(prefix = "simulator", name = ["enabled"], havingValue = "true")
-class ValgnattSimulator(private val publisher: ResultatPublisher) {
-
+class ValgnattSimulator(
+    private val publisher: ResultatPublisher,
+) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    private data class Krets(val fylke: String, val kommune: String, val navn: String)
-
-    private val kretser = listOf(
-        Krets("Vestfold", "Sandefjord", "Stokke"),
-        Krets("Vestfold", "Sandefjord", "Sentrum"),
-        Krets("Vestfold", "Sandefjord", "Andebu"),
-        Krets("Vestfold", "Tønsberg", "Nøtterøy"),
-        Krets("Vestfold", "Larvik", "Stavern"),
-        Krets("Oslo", "Oslo", "Grünerløkka"),
-        Krets("Oslo", "Oslo", "Frogner"),
-        Krets("Vestland", "Bergen", "Fana"),
-        Krets("Trøndelag", "Trondheim", "Byåsen"),
-        Krets("Troms", "Tromsø", "Kvaløya"),
+    private data class Krets(
+        val fylke: String,
+        val kommune: String,
+        val navn: String,
     )
+
+    private val kretser =
+        listOf(
+            Krets("Vestfold", "Sandefjord", "Stokke"),
+            Krets("Vestfold", "Sandefjord", "Sentrum"),
+            Krets("Vestfold", "Sandefjord", "Andebu"),
+            Krets("Vestfold", "Tønsberg", "Nøtterøy"),
+            Krets("Vestfold", "Larvik", "Stavern"),
+            Krets("Oslo", "Oslo", "Grünerløkka"),
+            Krets("Oslo", "Oslo", "Frogner"),
+            Krets("Vestland", "Bergen", "Fana"),
+            Krets("Trøndelag", "Trondheim", "Byåsen"),
+            Krets("Troms", "Tromsø", "Kvaløya"),
+        )
 
     private val partier = listOf("AP", "H", "FRP", "SV", "SP", "KRF", "V", "MDG", "R")
 
@@ -35,13 +41,22 @@ class ValgnattSimulator(private val publisher: ResultatPublisher) {
     @Scheduled(fixedRateString = "\${simulator.intervall-ms:1000}")
     fun sendResultat() {
         val terning = Random.nextInt(100)
-        val melding = when {
-            terning < 5 && forrige != null -> forrige!!.also { log.info("🎲 Sender duplikat") }
-            terning < 8 -> lagMelding()
-                .let { it.copy(stemmerPerParti = it.stemmerPerParti + ("AP" to -42)) }
-                .also { log.info("🎲 Sender korrupt melding") }
-            else -> lagMelding()
-        }
+        val melding =
+            when {
+                terning < 5 && forrige != null -> {
+                    forrige!!.also { log.info("🎲 Sender duplikat") }
+                }
+
+                terning < 8 -> {
+                    lagMelding()
+                        .let { it.copy(stemmerPerParti = it.stemmerPerParti + ("AP" to -42)) }
+                        .also { log.info("🎲 Sender korrupt melding") }
+                }
+
+                else -> {
+                    lagMelding()
+                }
+            }
         forrige = melding
         publisher.publiser(melding)
     }
